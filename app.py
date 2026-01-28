@@ -4,80 +4,88 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import zipfile
 
+# إعدادات الصفحة
+st.set_page_config(page_title="Used Car Analyst", layout="wide")
 
-# 1. Page Configuration and Title
-st.set_page_config(page_title="Used Car Search Engine", layout="wide")
-st.title("🚗 Used Car Inventory Search System")
-st.markdown("This application allows you to filter and search for cars based on specific criteria.")
-
-# 2. Data Loading with Cache
+# دالة لتحميل البيانات
 @st.cache_data
 def load_data():
-    # Pandas can read a CSV directly from a ZIP file if it's the only file inside it
-    df = pd.read_csv('New_Data.zip', compression='zip') 
-    return df
+    try:
+        with zipfile.ZipFile('New_Data.zip', 'r') as zip_ref:
+            zip_ref.extractall()
+        df = pd.read_csv('New_Data.csv')
+        # تنظيف بسيط للبيانات
+        df['year'] = df['year'].astype(int)
+        return df
+    except Exception as e:
+        st.error(f"خطأ في تحميل البيانات: {e}")
+        return None
 
 df = load_data()
 
-# 3. Sidebar Search Filters
-st.sidebar.header("🔍 Search Filters")
-
-# --- Manufacturer Filter ---
-brands = df['manufacturer'].unique().tolist()
-selected_brands = st.sidebar.multiselect("Select Manufacturer:", brands, default=brands[:3])
-
-# --- Price Range Filter ---
-min_price = int(df['price'].min())
-max_price = int(df['price'].max())
-# Set slider max to 100,000 for better usability
-price_range = st.sidebar.slider("Price Range ($):", min_price, 100000, (5000, 30000))
-
-# --- Year Filter ---
-min_year = int(df['year'].min())
-max_year = int(df['year'].max())
-selected_year = st.sidebar.slider("Manufacturing Year:", min_year, max_year, (2010, 2021))
-
-# --- Condition Filter ---
-conditions = df['condition'].unique().tolist()
-selected_condition = st.sidebar.multiselect("Car Condition:", conditions, default=conditions)
-
-# 4. Applying Filters to the Dataframe
-filtered_df = df[
-    (df['manufacturer'].isin(selected_brands)) &
-    (df['price'].between(price_range[0], price_range[1])) &
-    (df['year'].between(selected_year[0], selected_year[1])) &
-    (df['condition'].isin(selected_condition))
-]
-
-# 5. Displaying the Results
-st.subheader(f"Search Results: {len(filtered_df)} cars found")
-
-if not filtered_df.empty:
-    # Display interactive data table
-    st.dataframe(filtered_df)
-    
-    # 6. Interactive Visualizations
+if df is not None:
+    st.title("🚗 نظام تحليل بيانات السيارات المستخدمة")
     st.markdown("---")
-    col1, col2 = st.columns(2)
+
+    # --- القائمة الجانبية (Side Bar) ---
+    st.sidebar.header("🔍 فلاتر البحث")
     
+    manufacturer = st.sidebar.multiselect("اختر الشركة المصنعة:", options=df['manufacturer'].unique())
+    condition = st.sidebar.multiselect("حالة السيارة:", options=df['condition'].unique())
+    price_range = st.sidebar.slider("نطاق السعر ($):", 
+                                    min_value=int(df['price'].min()), 
+                                    max_value=int(df['price'].max()), 
+                                    value=(5000, 50000))
+
+    # تطبيق الفلاتر
+    mask = df['price'].between(*price_range)
+    if manufacturer:
+        mask &= df['manufacturer'].isin(manufacturer)
+    if condition:
+        mask &= df['condition'].isin(condition)
+    
+    filtered_df = df[mask]
+
+    # --- القسم الأول: الإحصائيات السريعة (KPIs) ---
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.write("📊 Price Distribution for Selected Results:")
-        fig1, ax1 = plt.subplots()
-        sns.histplot(filtered_df['price'], bins=20, kde=True, ax=ax1, color='blue')
-        st.pyplot(fig1)
-        
+        st.metric("عدد السيارات المتاحة", len(filtered_df))
     with col2:
-        # Note: Using 'type' as 'model' column was not present in the cleaned data
-        st.write("📈 Top 5 Car Types in Search Results:")
-        if 'type' in filtered_df.columns:
-            top_types = filtered_df['type'].value_counts().head(5)
-            fig2, ax2 = plt.subplots()
-            sns.barplot(x=top_types.values, y=top_types.index, ax=ax2, palette='viridis')
-            plt.xlabel("Count of Cars")
-            st.pyplot(fig2)
-        else:
-            st.info("The 'type' column is not available in the dataset.")
+        st.metric("متوسط السعر", f"${filtered_df['price'].mean():,.0f}")
+    with col3:
+        st.metric("أعلى سعر موجود", f"${filtered_df['price'].max():,.0f}")
 
-else:
-    st.warning("No cars match your search criteria. Please try broadening your filters.")
+    st.markdown("---")
 
+    # --- القسم الثاني: الرسوم البيانية ---
+    col_chart1, col_chart2 = st.columns(2)
+    
+    with col_chart1:
+        st.subheader("📊 توزيع الأسعار")
+        fig, ax = plt.subplots()
+        sns.histplot(filtered_df['price'], kde=True, ax=ax, color='skyblue')
+        st.pyplot(fig)
+
+    with col_chart2:
+        st.subheader("📈 الحالة مقابل السعر")
+        fig2, ax2 = plt.subplots()
+        sns.boxplot(x='condition', y='price', data=filtered_df, ax=ax2)
+        plt.xticks(rotation=45)
+        st.pyplot(fig2)
+
+    # --- القسم الثالث: عرض الجدول ---
+    st.markdown("---")
+    st.subheader("📋 بيانات السيارات التفصيلية")
+    st.write(f"عرض {len(filtered_df)} نتيجة مطابقة لبحثك:")
+    
+    # عرض الجدول بشكل تفاعلي
+    st.dataframe(filtered_df, use_container_width=True)
+
+    # زر تحميل البيانات المفلترة
+    csv = filtered_df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 تحميل البيانات المفلترة (CSV)",
+        data=csv,
+        file_name='filtered_car_data.csv',
+        mime='text/csv',
+    )
