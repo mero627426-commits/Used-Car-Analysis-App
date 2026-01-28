@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import zipfile
+
 
 # 1. Page Configuration and Title
 st.set_page_config(page_title="Used Car Search Engine", layout="wide")
@@ -78,3 +80,4 @@ if not filtered_df.empty:
 
 else:
     st.warning("No cars match your search criteria. Please try broadening your filters.")
+
