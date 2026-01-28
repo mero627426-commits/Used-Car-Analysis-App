@@ -11,8 +11,8 @@ st.markdown("This application allows you to filter and search for cars based on 
 # 2. Data Loading with Cache
 @st.cache_data
 def load_data():
-    # Ensure 'New_Data.csv' is in the same directory
-    df = pd.read_csv('New_Data.csv') 
+    # Pandas can read a CSV directly from a ZIP file if it's the only file inside it
+    df = pd.read_csv('New_Data.zip', compression='zip') 
     return df
 
 df = load_data()
