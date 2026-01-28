@@ -2,3 +2,4 @@ pandas
 seaborn
 matplotlib
 streamlit
+altair==4.2.2
